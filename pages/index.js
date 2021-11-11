@@ -1,82 +1,75 @@
 import Head from 'next/head'
+import { Line } from 'react-chartjs-2';
 
-export default function Home() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen py-2">
-      <Head>
-        <title>Create Next App</title>
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+export default function Home({stats}) {
+  const charts = []
+  for (var droplet in stats) {
+    const data = {
+      labels: stats[droplet].load5.map(d => ''),
+      datasets: [{
+        label: droplet + ' load5',
+        data: stats[droplet].load5.map(d => parseFloat(d[1])),
+        fill: true,
+        backgroundColor: 'rgb(44, 103, 246)',
+        borderColor: 'rgba(44, 103, 246, 0.1)',
+      }]
+    }
+    const options = {
+      scales: {
+        xAxes: [{
+            ticks: {
+                display: false //this will remove only the label
+            }
+        }]
+      },
+      elements: {
+        point:{
+            radius: 0
+        } 
+      }
+    }
+    charts.push(<div className="w-96 m-2">
+      <Line data={data} options={options} />
+    </div>)
+  }
+  return <div className="flex flex-col items-center justify-center">
+  
+    {charts}
 
-      <main className="flex flex-col items-center justify-center w-full flex-1 px-20 text-center">
-        <h1 className="text-6xl font-bold">
-          Welcome to{' '}
-          <a className="text-blue-600" href="https://nextjs.org">
-            Next.js!
-          </a>
-        </h1>
+  </div>
+}
 
-        <p className="mt-3 text-2xl">
-          Get started by editing{' '}
-          <code className="p-3 font-mono text-lg bg-gray-100 rounded-md">
-            pages/index.js
-          </code>
-        </p>
+export async function getServerSideProps(context) {
+  const token = process.env.DO_TOKEN 
 
-        <div className="flex flex-wrap items-center justify-around max-w-4xl mt-6 sm:w-full">
-          <a
-            href="https://nextjs.org/docs"
-            className="p-6 mt-6 text-left border w-96 rounded-xl hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Documentation &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Find in-depth information about Next.js features and API.
-            </p>
-          </a>
+  const API = 'https://api.digitalocean.com/v2'
+  
+  const ret = await fetch(API + '/droplets', {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  })
+  const r = await ret.json()
+  const droplets = r.droplets.map(d => {return {name: d.name, id: d.id}})
 
-          <a
-            href="https://nextjs.org/learn"
-            className="p-6 mt-6 text-left border w-96 rounded-xl hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Learn &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Learn about Next.js in an interactive course with quizzes!
-            </p>
-          </a>
+  // const droplets = [{ name: 'prod-C1-sfo3', id: 199666189 }]
+  
+  const end = Math.round(Date.now()/1000)
+  const start = end - 7 * 24 * 60 * 60 
+  const stats = {}
+  for (var i=0;i < droplets.length; i++) {
+    const droplet = droplets[i]
+    console.log(API + `/monitoring/metrics/droplet/cpu?host_id=${droplet.id}&start=${start}&end=${end}`)
+    const ret = await fetch(API + `/monitoring/metrics/droplet/load_5?host_id=${droplet.id}&start=${start}&end=${end}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+    const r = await ret.json()
+    stats[droplet.name] = {load5: r.data.result[0].values}
+  }
 
-          <a
-            href="https://github.com/vercel/next.js/tree/master/examples"
-            className="p-6 mt-6 text-left border w-96 rounded-xl hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Examples &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Discover and deploy boilerplate example Next.js projects.
-            </p>
-          </a>
-
-          <a
-            href="https://vercel.com/import?filter=next.js&utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-            className="p-6 mt-6 text-left border w-96 rounded-xl hover:text-blue-600 focus:text-blue-600"
-          >
-            <h3 className="text-2xl font-bold">Deploy &rarr;</h3>
-            <p className="mt-4 text-xl">
-              Instantly deploy your Next.js site to a public URL with Vercel.
-            </p>
-          </a>
-        </div>
-      </main>
-
-      <footer className="flex items-center justify-center w-full h-24 border-t">
-        <a
-          className="flex items-center justify-center"
-          href="https://vercel.com?utm_source=create-next-app&utm_medium=default-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Powered by{' '}
-          <img src="/vercel.svg" alt="Vercel Logo" className="h-4 ml-2" />
-        </a>
-      </footer>
-    </div>
-  )
+  return {
+    props: {stats}
+  }
 }
